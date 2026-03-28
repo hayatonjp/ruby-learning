@@ -1,12 +1,19 @@
 require 'json'
+require 'date'
 
 class Task
-    attr_accessor :title, :completed, :priority # クラス外部から変更したい定義 getter + setter, クラス内部でしか使わないならインスタンス変数でOK(例: tasks.title = "aa")
+    attr_accessor :title, :completed, :priority, :due_date # クラス外部から変更したい定義 getter + setter, クラス内部でしか使わないならインスタンス変数でOK(例: tasks.title = "aa")
 
-    def initialize(title, priority)
+    def initialize(title, priority = '小', due_date = nil)
         @title = title
         @completed = false
         @priority = priority # "高", "中", "低"
+        @due_date = due_date # Date Object
+    end
+
+    def overdue?
+        return false if @completed || @due_date.nil?
+        @due_date < Date.today
     end
 
     def complete! # 状態変更するために!をつけている
@@ -15,7 +22,19 @@ class Task
 
     def to_s
         status = @completed ? "[完了]" : "[未完了]"
-        "#{status} [#{@priority}] #{@title}"
+        priority_str = "[#{@priority}]"
+
+        date_str = if @due_date
+            due = @due_date.strftime('%m/%d')
+            if overdue?
+                " 期限: #{due} 期限切れ"
+            else
+                " 期限: #{due}"
+            end
+        else
+            ""
+        end 
+        "#{status} #{priority_str} #{@title}#{date_str}"
     end
 
     def priority_value
@@ -34,7 +53,7 @@ class TodoApp
         load_tasks
     end
 
-    def add_task_with_priority
+    def add_task_with_details
         print "タスク名: "
         title = gets.chomp
 
@@ -49,7 +68,21 @@ class TodoApp
         else "中"
         end
 
-        @tasks << Task.new(title, priority)
+        print "期限を設定しますか？ (y/n): "
+        if gets.chomp.downcase == "y"
+            print "期限（YYYY-MM-DD）: "
+            date_str = gets.chomp
+            begin
+                due_date = Date.strptime(date_str, '%Y-%m-%d')
+            rescue ArgumentError
+                puts "日付の形式が正しくありません。YYYY-MM-DD形式で入力してください。期限なしで登録します。"
+                due_date = nil
+            end
+        else
+            due_date = nil
+        end
+
+        @tasks << Task.new(title, priority, due_date)
         save_tasks
         puts "追加しました！"
     end
@@ -67,11 +100,12 @@ class TodoApp
     end
 
     def load_tasks
-        return unless File.exist?('tasks.json')
+        return unless File.exist?('tasks.json') && !File.empty?('tasks.json') # exist?はそのファイルがあるかどうか、empty?はそのファイルの中身が空かどうか
 
         data = JSON.parse(File.read('tasks.json'))
         @tasks = data.map do |task_data|
-            task = Task.new(task_data['title'], task_data['priority'])
+            due_date = task_data['due_date'] ? Date.parse(task_data['due_date']) : nil
+            task = Task.new(task_data['title'], task_data['priority'], due_date)
             task.completed = task_data['completed']
             task
         end
@@ -82,7 +116,8 @@ class TodoApp
             { 
                 title: task.title,
                 completed: task.completed,
-                priority: task.priority
+                priority: task.priority,
+                due_date: task.due_date&.to_s # &はnilの場合にエラーを返さずにnilを返す演算子
             }
         end
         File.write('tasks.json', JSON.pretty_generate(data)) # pretty_generate: 見やすい形式で表示する
@@ -124,7 +159,7 @@ class TodoApp
 
             case choice
                 when "1"
-                    add_task_with_priority
+                    add_task_with_details
                 when "2"
                     list_tasks
                 when "3"
