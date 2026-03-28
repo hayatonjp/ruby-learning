@@ -1,11 +1,12 @@
 require 'json'
 
 class Task
-    attr_accessor :title, :completed # クラス外部から変更したい定義 getter + setter, クラス内部でしか使わないならインスタンス変数でOK(例: tasks.title = "aa")
+    attr_accessor :title, :completed, :priority # クラス外部から変更したい定義 getter + setter, クラス内部でしか使わないならインスタンス変数でOK(例: tasks.title = "aa")
 
-    def initialize(title)
+    def initialize(title, priority)
         @title = title
         @completed = false
+        @priority = priority # "高", "中", "低"
     end
 
     def complete! # 状態変更するために!をつけている
@@ -14,7 +15,16 @@ class Task
 
     def to_s
         status = @completed ? "[完了]" : "[未完了]"
-        "#{status} #{@title}"
+        "#{status} [#{@priority}] #{@title}"
+    end
+
+    def priority_value
+        case @priority
+            when "高" then 3
+            when "中" then 2
+            when "低" then 1
+            else 0
+        end
     end
 end
 
@@ -24,12 +34,44 @@ class TodoApp
         load_tasks
     end
 
+    def add_task_with_priority
+        print "タスク名: "
+        title = gets.chomp
+
+        puts "優先度を選択（1:高, 2:中, 3:低）"
+        print "> "
+        priority_choice = gets.chomp
+
+        priority = case priority_choice
+        when "1" then "高"
+        when "2" then "中"
+        when "3" then "低"
+        else "中"
+        end
+
+        @tasks << Task.new(title, priority)
+        save_tasks
+        puts "追加しました！"
+    end
+
+    def list_tasks_sorted
+        if @tasks.empty?
+            puts "タスクはありません"
+        else
+            # 優先度でソート（高い順）
+            sorted_tasks = @tasks.sort_by { |task| -task.priority_value }
+            sorted_tasks.each_with_index do |task, i|
+                puts "#{i+1}. #{task}"
+            end
+        end
+    end
+
     def load_tasks
         return unless File.exist?('tasks.json')
 
         data = JSON.parse(File.read('tasks.json'))
         @tasks = data.map do |task_data|
-            task = Task.new(task_data['title'])
+            task = Task.new(task_data['title'], task_data['priority'])
             task.completed = task_data['completed']
             task
         end
@@ -37,14 +79,13 @@ class TodoApp
 
     def save_tasks
         data = @tasks.map do |task|
-            { title: task.title, completed: task.completed }
+            { 
+                title: task.title,
+                completed: task.completed,
+                priority: task.priority
+            }
         end
         File.write('tasks.json', JSON.pretty_generate(data)) # pretty_generate: 見やすい形式で表示する
-    end
-
-    def add_task(title)
-        @tasks << Task.new(title)
-        save_tasks
     end
 
     def list_tasks
@@ -83,9 +124,7 @@ class TodoApp
 
             case choice
                 when "1"
-                    print "タスク名: "
-                    title = gets.chomp
-                    add_task(title)
+                    add_task_with_priority
                 when "2"
                     list_tasks
                 when "3"
