@@ -1,6 +1,11 @@
 require 'json'
 require 'date'
 
+# require_relativeは相対パスでの参照
+require_relative 'modules/persistable'
+require_relative 'modules/sortable'
+require_relative 'modules/displayable'
+
 class Task
     attr_accessor :title, :completed, :priority, :due_date # クラス外部から変更したい定義 getter + setter, クラス内部でしか使わないならインスタンス変数でOK(例: tasks.title = "aa")
 
@@ -48,6 +53,10 @@ class Task
 end
 
 class TodoApp
+    include Persistable
+    include Sortable
+    include Displayable
+
     def initialize
         @tasks = []
         load_tasks
@@ -87,68 +96,6 @@ class TodoApp
         puts "追加しました！"
     end
 
-    def list_tasks_sorted
-        if @tasks.empty?
-            puts "タスクはありません"
-        else
-            # 優先度でソート（高い順）
-            sorted_tasks = @tasks.sort_by { |task| -task.priority_value }
-            sorted_tasks.each_with_index do |task, i|
-                puts "#{i+1}. #{task}"
-            end
-        end
-    end
-
-    def load_tasks
-        return unless File.exist?('tasks.json') && !File.empty?('tasks.json') # exist?はそのファイルがあるかどうか、empty?はそのファイルの中身が空かどうか
-
-        begin   
-            data = JSON.parse(File.read('tasks.json'))
-            @tasks = data.map do |task_data|
-                due_date = task_data['due_date'] ? Date.parse(task_data['due_date']) : nil
-                task = Task.new(task_data['title'], task_data['priority'], due_date)
-                task.completed = task_data['completed']
-                task
-            end
-        rescue JSON::ParserError => e
-            # JSON形式が不正の場合
-            puts "error: JSON形式が不正です（#{e.message})"
-            puts "tasks.jsonをバックアップして新規作成します"
-            File.rename('tasks.json', "tasks_backup_#{Time.now.to_i}.json")
-            @tasks = []
-        rescue Errno::EACCES => e
-            # ファイルの読み込み権限がない場合
-            puts "error: ファイルの読み込み権限がありません"
-            @tasks = []
-        rescue StandardError => e
-            # その他予期せぬエラー
-            puts "error: タスクの読み込み中に問題が発生しました (#{e.class}: #{e.message})"
-            @tasks = []
-        end
-    end
-
-    def save_tasks
-        data = @tasks.map do |task|
-            { 
-                title: task.title,
-                completed: task.completed,
-                priority: task.priority,
-                due_date: task.due_date&.to_s # &はnilの場合にエラーを返さずにnilを返す演算子
-            }
-        end
-        File.write('tasks.json', JSON.pretty_generate(data)) # pretty_generate: 見やすい形式で表示する
-    end
-
-    def list_tasks
-        if @tasks.empty?
-            puts "タスクはありません"
-        else
-            @tasks.each_with_index do |task, i|
-                puts "#{i + 1}, #{task}"
-            end
-        end
-    end
-
     def complete_task(index)
         if index >= 0 && index < @tasks.length
             @tasks[index].complete!
@@ -157,15 +104,6 @@ class TodoApp
         else
             puts "無効な番号です"
         end
-    end
-
-    def show_menu
-        puts "\n==タスク管理=="
-        puts "1. タスク追加"
-        puts "2. タスク一覧"
-        puts "3. タスク完了"
-        puts "4. 終了"
-        print "選択: "
     end
 
     def run
